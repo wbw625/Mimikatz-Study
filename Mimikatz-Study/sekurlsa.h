@@ -14,6 +14,8 @@
 #define AES_128_KEY_LENGTH	16
 #define DES_3DES_KEY_LENGTH	24
 
+#define LM_NTLM_HASH_LENGTH	16
+#define SHA_DIGEST_LENGTH 	20
 
 
 
