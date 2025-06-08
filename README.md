@@ -350,15 +350,15 @@ do {
 
 ### 运行结果
 
-![alt text](images/result3.png)
+
 
 可以看到，`GetCredentialsFromWdigest`函数成功提取了 WDigest 缓存中的用户名和明文密码。
 
 其中，
 
 ```
-Username: Lenovo
-Password: wbw123456
+Username: 
+Password: 
 ```
 
 为当前登录用户，同时也是`Administrator`用户的用户名和明文密码。
@@ -543,15 +543,15 @@ wprintf(L"\n");
 
 ### 运行结果
 
-![alt text](images/result4.png)
+
 
 可以看到，`GetCredentialsFromMSV`函数成功提取了 MSV 缓存中的用户名和 NTLM 密码散列。
 
 其中的结果，
 
 ```
-Username: Lenovo
-NTLMHash: 52f7d2 ...... a1
+Username: 
+NTLMHash: 
 ```
 
 为当前登录用户，同时也是`Administrator`用户的用户名和 NTLM 密码散列。
