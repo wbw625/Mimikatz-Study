@@ -1,7 +1,6 @@
 # mini 版 Mimikatz
 
-王博文 522031910633
-
+(2024-2025-2)-NIS3358-01-操作系统安全技术与实践
 
 ## 1. EnableSeDebugPrivilege()
 此函数的作用是启用管理员账户默认禁用的`SeDebugPrivilege`权限，以便后续操作可以访问系统进程和内存。
